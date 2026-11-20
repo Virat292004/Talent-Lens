@@ -1,0 +1,184 @@
+name: talentlens
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-talentlens}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-talentlens-local}
+      POSTGRES_DB: ${POSTGRES_DB:-talentlens}
+    ports: ["5432:5432"]
+    volumes: ["postgres_data:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 4s
+      retries: 20
+    networks: [backend]
+  mongo:
+    image: mongo:7
+    ports: ["27017:27017"]
+    volumes: ["mongo_data:/data/db"]
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 4s
+      retries: 20
+    networks: [backend]
+  rabbitmq:
+    build: ./infrastructure/rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: talentlens
+      RABBITMQ_DEFAULT_PASS: talentlens-local
+    ports: ["5672:5672", "15672:15672"]
+    expose: ["15692"]
+    volumes: ["rabbitmq_data:/var/lib/rabbitmq"]
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 4s
+      retries: 20
+    networks: [backend, monitoring-edge]
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [backend]
+  gateway:
+    build: {context: ., dockerfile: api-gateway/Dockerfile}
+    env_file: [.env]
+    environment:
+      JOB_URL: http://job-service:5001
+      RESUME_URL: http://resume-service:5002
+      CANDIDATE_URL: http://candidate-service:5003
+      PARSING_URL: http://parsing-service:5004
+      MATCHING_URL: http://matching-service:5005
+      RANKING_URL: http://ranking-service:5006
+      REDIS_URL: redis://redis:6379/0
+      ZIPKIN_URL: http://zipkin:9411/api/v2/spans
+      ENABLE_TRACING: ${ENABLE_TRACING:-false}
+    ports: ["8080:8080"]
+    networks: [backend, edge]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 10s
+      timeout: 4s
+      retries: 10
+    depends_on:
+      redis: {condition: service_healthy}
+      job-service: {condition: service_healthy}
+      resume-service: {condition: service_healthy}
+      candidate-service: {condition: service_healthy}
+      parsing-service: {condition: service_healthy}
+      matching-service: {condition: service_healthy}
+      ranking-service: {condition: service_healthy}
+  job-service:
+    build: {context: ., dockerfile: services/job-service/Dockerfile}
+    env_file: [.env]
+    environment: {SERVICE_NAME: job-service, PORT: "5001"}
+    networks: [backend]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5001/health')"]
+      interval: 10s
+      timeout: 4s
+      retries: 10
+    depends_on: {postgres: {condition: service_healthy}, rabbitmq: {condition: service_healthy}}
+  resume-service:
+    build: {context: ., dockerfile: services/resume-service/Dockerfile}
+    env_file: [.env]
+    environment: {SERVICE_NAME: resume-service, PORT: "5002", STORAGE_DIR: /data/resumes}
+    volumes: ["resume_files:/data/resumes"]
+    networks: [backend]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5002/health')"]
+      interval: 10s
+      timeout: 4s
+      retries: 10
+    depends_on: {postgres: {condition: service_healthy}, rabbitmq: {condition: service_healthy}}
+  candidate-service:
+    build: {context: ., dockerfile: services/candidate-service/Dockerfile}
+    env_file: [.env]
+    environment: {SERVICE_NAME: candidate-service, PORT: "5003"}
+    networks: [backend]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5003/health')"]
+      interval: 10s
+      timeout: 4s
+      retries: 10
+    depends_on: {postgres: {condition: service_healthy}, rabbitmq: {condition: service_healthy}}
+  parsing-service:
+    build: {context: ., dockerfile: services/parsing-service/Dockerfile}
+    env_file: [.env]
+    environment: {SERVICE_NAME: parsing-service, PORT: "5004", STORAGE_DIR: /data/resumes, RESUME_SERVICE_URL: http://resume-service:5002}
+    volumes: ["resume_files:/data/resumes"]
+    networks: [backend]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5004/health')"]
+      interval: 10s
+      timeout: 4s
+      retries: 10
+    depends_on: {mongo: {condition: service_healthy}, rabbitmq: {condition: service_healthy}, resume-service: {condition: service_started}}
+  matching-service:
+    build: {context: ., dockerfile: services/matching-service/Dockerfile}
+    env_file: [.env]
+    environment: {SERVICE_NAME: matching-service, PORT: "5005"}
+    networks: [backend, model-egress]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5005/health')"]
+      interval: 10s
+      timeout: 4s
+      retries: 10
+    depends_on: {postgres: {condition: service_healthy}, mongo: {condition: service_healthy}, rabbitmq: {condition: service_healthy}}
+  ranking-service:
+    build: {context: ., dockerfile: services/ranking-service/Dockerfile}
+    env_file: [.env]
+    environment: {SERVICE_NAME: ranking-service, PORT: "5006"}
+    networks: [backend]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5006/health')"]
+      interval: 10s
+      timeout: 4s
+      retries: 10
+    depends_on: {mongo: {condition: service_healthy}, rabbitmq: {condition: service_healthy}}
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE: ${VITE_API_BASE:-http://localhost:8080}
+    ports: ["5173:80"]
+    networks: [edge]
+    depends_on: [gateway]
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    profiles: [monitoring]
+    volumes: ["./infrastructure/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro"]
+    ports: ["9090:9090"]
+    networks: [backend, monitoring-edge]
+  grafana:
+    image: grafana/grafana:11.2.0
+    profiles: [monitoring]
+    depends_on: [prometheus]
+    volumes: ["./infrastructure/grafana/provisioning:/etc/grafana/provisioning:ro"]
+    ports: ["3000:3000"]
+    networks: [backend, monitoring-edge]
+  zipkin:
+    image: openzipkin/zipkin:3
+    profiles: [monitoring]
+    ports: ["9411:9411"]
+    networks: [backend, monitoring-edge]
+volumes:
+  postgres_data:
+  mongo_data:
+  rabbitmq_data:
+  resume_files:
+networks:
+  backend:
+    internal: true
+  monitoring-edge:
+    driver: bridge
+  edge:
+  model-egress:
+    driver: bridge

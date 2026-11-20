@@ -1,0 +1,13 @@
+.env
+.venv/
+__pycache__/
+*.py[cod]
+*.tsbuildinfo
+node_modules/
+dist/
+data/
+coverage/
+.pytest_cache/
+
+.docker-run-config/
+.docker-run-config/

@@ -1,0 +1,6 @@
+-r requirements-runtime.txt
+opentelemetry-api==1.33.1
+opentelemetry-sdk==1.33.1
+opentelemetry-instrumentation-fastapi==0.54b1
+opentelemetry-instrumentation-httpx==0.54b1
+opentelemetry-exporter-zipkin-json==1.33.1

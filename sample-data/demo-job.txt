@@ -1,0 +1,3 @@
+Backend Software Engineer
+
+We are looking for a backend software engineer with 3 years experience building reliable API services. Mandatory skills include Python, FastAPI, SQL, PostgreSQL and Docker. Preferred skills include RabbitMQ, Redis and scikit-learn. The role will design REST API systems, build asynchronous processing workflows, collaborate with frontend engineers and improve service reliability. A bachelor's degree in computer science or related field is preferred.

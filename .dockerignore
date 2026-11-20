@@ -1,0 +1,13 @@
+.git
+.venv
+**/__pycache__
+**/.pytest_cache
+**/node_modules
+**/dist
+data
+.docker-run-config
+.env
+.env.*
+!/.env.example
+*.pyc
+*.log
