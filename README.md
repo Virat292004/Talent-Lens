@@ -59,6 +59,44 @@ flowchart LR
   GRAF[Grafana] --> PROM
 ```
 
+## Application screenshots
+
+Screenshots below show the local prototype using sample data. The overview shows completed parsing and ranking activity; the intake view shows parsed resumes ready for review.
+
+### Recruiter workflow
+
+**Workspace overview**
+
+![TalentLens recruiter workspace overview](docs/screenshots/overview.png)
+
+**Resume intake**
+
+![TalentLens resume intake with parsed sample resumes](docs/screenshots/resume-intake.png)
+
+**Candidate rankings**
+
+![TalentLens candidate rankings](docs/screenshots/rankings.png)
+
+**Side-by-side candidate comparison**
+
+![TalentLens candidate comparison](docs/screenshots/candidate-comparison.png)
+
+**Configurable scoring weights**
+
+![TalentLens scoring settings](docs/screenshots/scoring-settings.png)
+
+### Monitoring screenshots
+
+**Grafana latency and service health panels**
+
+![TalentLens Grafana latency and health dashboard](docs/screenshots/grafana-latency-health.png)
+
+**Grafana request rate and Prometheus target health**
+
+![TalentLens Grafana request rate and target health dashboard](docs/screenshots/grafana-throughput-targets.png)
+
+The monitoring charts show activity from this local demo and are illustrative; they are not production load-test results.
+
 ### Services and local ports
 
 | Component | Port | Responsibility / data |
